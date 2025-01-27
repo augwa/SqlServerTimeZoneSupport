@@ -23,7 +23,8 @@ SQL Server 2016 includes built-in support for Windows time zones using a new `AT
 3. Publish the database schema using the following command, updating the connection string as appropriate to you
     ```
     sqlpackage \
-      /Action:Publish /SourceFile:"./Database/bin/Debug/Database.dacpac"
+      /Action:Publish \
+      /SourceFile:"./Database/bin/Debug/Database.dacpac" \
       /TargetConnectionString:"Server=YourServerName;Database=YourDatabaseName;Trusted_Connection=True"
     ```
 4. Run the `SqlTzLoader` utility, passing the connection string with the `-c` parameter.
