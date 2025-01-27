@@ -1,3 +1,5 @@
+This is a fork of [mattjohnsonpint/SqlServerTimeZoneSupport](https://github.com/mattjohnsonpint/SqlServerTimeZoneSupport) updated to support .Net 8.0.
+
 # SQL Server Time Zone Support
 
 This project adds full support for time zones to Microsoft SQL Server.
@@ -16,28 +18,26 @@ SQL Server 2016 includes built-in support for Windows time zones using a new `AT
 
 ### Installation
 
-1. Download the latest `sqltz.zip` file from [the releases page][5].
-2. Extract the zip file to a directory.
-3. Open the `tzdb.sql` file, and run it against your database.
-   - It will create all objects in an independent schema called `[Tzdb]`.
-   - Microsoft SQL Server 2008 R2 and higher are supported, including Azure SQL Database.
-4. Run the `SqlTzLoader.exe` utility, passing the connection string with the `-c` parameter.  
+1. Build the project from the solution folder `dotnet build`.
+2. Download [SqlPackage](https://learn.microsoft.com/en-us/sql/tools/sqlpackage/sqlpackage-download?view=sql-server-ver16) if not already installed.
+3. Publish the database schema using the following command, updating the connection string as appropriate to you
+    ```
+    sqlpackage \
+      /Action:Publish /SourceFile:"./Database/bin/Debug/Database.dacpac"
+      /TargetConnectionString:"Server=YourServerName;Database=YourDatabaseName;Trusted_Connection=True"
+    ```
+4. Run the `SqlTzLoader` utility, passing the connection string with the `-c` parameter.
    For example:
 
-   ```bat
-   SqlTzLoader.exe -c"Server=YourServerName;Database=YourDatabaseName;Trusted_Connection=True"
    ```
-   
-   or
-   
-   ```bat
-   SqlTzLoader.exe -c"Server=YourServerName;Database=YourDatabaseName;User Id=foo;Password=bar"
+   SqlTzLoader -c"Server=YourServerName;Database=YourDatabaseName;Trusted_Connection=True"
    ```
+
    It will download the latest time zone data and populate the tables in the database.
 
 ### Staying Current
 
-You can re-execute the `SqlTzLoader.exe` utility any time.  If new time zone data is available, it will download it and update the tables.  You can easily run this from SQL Agent, Windows Scheduler, or Azure Scheduler.  Please do not run it more than once daily.
+You can re-execute the `SqlTzLoader` utility any time.  If new time zone data is available, it will download it and update the tables.  You can easily run this from SQL Agent, Windows Scheduler, or Azure Scheduler.  Please do not run it more than once daily.
 
 Our data comes from the [Noda Time TZDB NZD files][6], which in turn is generated directly from IANA releases.  Therefore, you may notice a short delay between publishing of IANA TZDB and the updated NZD file being made available.
 

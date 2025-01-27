@@ -1,27 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
-using System.Data.SqlClient;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using CommandLine;
+using Microsoft.Data.SqlClient;
 using Microsoft.Threading;
 using NodaTime;
+using System.Data;
 
 namespace SqlTzLoader
 {
     class Program
     {
-        private static Options _options = new Options();
+        static Options _options;
 
         static void Main(string[] args)
         {
-            if (CommandLine.Parser.Default.ParseArgumentsStrict(args, _options))
+            var parsed = Parser.Default.ParseArguments<Options>(args);
+            if (!parsed.Errors.Any())
             {
-                if (_options.Verbose) Console.WriteLine("ConnectionString: {0}", _options.ConnectionString);
-                
-                AsyncPump.Run(() => MainAsync(args));
-            }          
+                AsyncPump.Run(() => parsed.WithParsedAsync<Options>(async options =>
+                {
+                    _options = options;
+                    if (_options.Verbose) Console.WriteLine("ConnectionString: {0}", _options.ConnectionString);
+
+                    await MainAsync(args);
+                }));
+            }
         }
 
         static async Task MainAsync(string[] args)
@@ -90,7 +91,7 @@ namespace SqlTzLoader
 
         private static async Task WriteIntervalsAsync(IDictionary<string, int> zones, CurrentTzdbProvider tzdb)
         {
-            var currentUtcYear = SystemClock.Instance.Now.InUtc().Year;
+            var currentUtcYear = DateTime.UtcNow.Year;
             var maxYear = currentUtcYear + 5;
             var maxInstant = new LocalDate(maxYear + 1, 1, 1).AtMidnight().InUtc().ToInstant();
 

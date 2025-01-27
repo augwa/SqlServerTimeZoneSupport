@@ -1,11 +1,7 @@
 ﻿
 // http://blogs.msdn.com/b/pfxteam/archive/2012/01/20/10259049.aspx
 
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Microsoft.Threading
 {
@@ -16,7 +12,7 @@ namespace Microsoft.Threading
         /// <param name="func">The asynchronous function to execute.</param>
         public static void Run(Func<Task> func)
         {
-            if (func == null) throw new ArgumentNullException("func");
+            ArgumentNullException.ThrowIfNull(func);
 
             var prevCtx = SynchronizationContext.Current;
             try
@@ -26,8 +22,7 @@ namespace Microsoft.Threading
                 SynchronizationContext.SetSynchronizationContext(syncCtx);
 
                 // Invoke the function and alert the context to when it completes
-                var t = func();
-                if (t == null) throw new InvalidOperationException("No task provided.");
+                var t = func() ?? throw new InvalidOperationException("No task provided.");
                 t.ContinueWith(delegate { syncCtx.Complete(); }, TaskScheduler.Default);
 
                 // Pump continuations and propagate any exceptions
@@ -41,8 +36,7 @@ namespace Microsoft.Threading
         private sealed class SingleThreadSynchronizationContext : SynchronizationContext
         {
             /// <summary>The queue of work items.</summary>
-            private readonly BlockingCollection<KeyValuePair<SendOrPostCallback, object>> m_queue =
-                new BlockingCollection<KeyValuePair<SendOrPostCallback, object>>();
+            private readonly BlockingCollection<KeyValuePair<SendOrPostCallback, object>> m_queue = [];
             /// <summary>The processing thread.</summary>
             private readonly Thread m_thread = Thread.CurrentThread;
 
@@ -51,7 +45,7 @@ namespace Microsoft.Threading
             /// <param name="state">The object passed to the delegate.</param>
             public override void Post(SendOrPostCallback d, object state)
             {
-                if (d == null) throw new ArgumentNullException("d");
+                ArgumentNullException.ThrowIfNull(d);
                 m_queue.Add(new KeyValuePair<SendOrPostCallback, object>(d, state));
             }
 
