@@ -8,14 +8,13 @@ namespace System.Threading.Tasks
         private readonly TimeSpan _cacheTimeout;
         private readonly Func<Task<T>> _taskFactory;
         private readonly Func<T> _valueFactory;
-        private readonly Stopwatch _stopwatch = new Stopwatch();
+        private readonly Stopwatch _stopwatch = new();
 
         private AsyncLazy<T> _lazy;
 
         public CachedAsyncLazy(TimeSpan cacheTimeout, Func<T> valueFactory)
         {
-            if (cacheTimeout <= TimeSpan.Zero)
-                throw new ArgumentOutOfRangeException("cacheTimeout");
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTimeout, TimeSpan.Zero);
 
             _cacheTimeout = cacheTimeout;
             _valueFactory = valueFactory;
@@ -24,8 +23,7 @@ namespace System.Threading.Tasks
 
         public CachedAsyncLazy(TimeSpan cacheTimeout, Func<Task<T>> taskFactory)
         {
-            if (cacheTimeout <= TimeSpan.Zero)
-                throw new ArgumentOutOfRangeException("cacheTimeout");
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTimeout, TimeSpan.Zero);
 
             _cacheTimeout = cacheTimeout;
             _taskFactory = taskFactory;

@@ -15,7 +15,7 @@ namespace SqlTzLoader
             var parsed = Parser.Default.ParseArguments<Options>(args);
             if (!parsed.Errors.Any())
             {
-                AsyncPump.Run(() => parsed.WithParsedAsync<Options>(async options =>
+                AsyncPump.Run(() => parsed.WithParsedAsync(async options =>
                 {
                     _options = options;
                     if (_options.Verbose) Console.WriteLine("ConnectionString: {0}", _options.ConnectionString);
@@ -92,8 +92,8 @@ namespace SqlTzLoader
         private static async Task WriteIntervalsAsync(IDictionary<string, int> zones, CurrentTzdbProvider tzdb)
         {
             var currentUtcYear = DateTime.UtcNow.Year;
-            var maxYear = currentUtcYear + 5;
-            var maxInstant = new LocalDate(maxYear + 1, 1, 1).AtMidnight().InUtc().ToInstant();
+            var maxYear = currentUtcYear + 10;
+            var maxInstant = new LocalDate(maxYear, 1, 1).AtMidnight().InUtc().ToInstant();
 
             var links = tzdb.Aliases.SelectMany(x => x).OrderBy(x => x).ToList();
 
@@ -103,84 +103,110 @@ namespace SqlTzLoader
                 if (links.Contains(id))
                     continue;
 
-                using (var dt = new DataTable())
+                using var dt = new DataTable();
+                dt.Columns.Add("UtcStart", typeof(DateTime));
+                dt.Columns.Add("UtcEnd", typeof(DateTime));
+                dt.Columns.Add("LocalStart", typeof(DateTime));
+                dt.Columns.Add("LocalEnd", typeof(DateTime));
+                dt.Columns.Add("OffsetMinutes", typeof(short));
+                dt.Columns.Add("Abbreviation", typeof(string));
+
+                var intervals = tzdb[id].GetZoneIntervals(Instant.MinValue, maxInstant);
+                foreach (var interval in intervals)
                 {
-                    dt.Columns.Add("UtcStart", typeof(DateTime));
-                    dt.Columns.Add("UtcEnd", typeof(DateTime));
-                    dt.Columns.Add("LocalStart", typeof(DateTime));
-                    dt.Columns.Add("LocalEnd", typeof(DateTime));
-                    dt.Columns.Add("OffsetMinutes", typeof(short));
-                    dt.Columns.Add("Abbreviation", typeof(string));
+                    DateTime utcStart = DateTime.MinValue;
+                    DateTime utcEnd = DateTime.MaxValue;
+                    DateTime localStart = DateTime.MinValue;
+                    DateTime localEnd = DateTime.MaxValue;
 
-                    var intervals = tzdb[id].GetZoneIntervals(Instant.MinValue, maxInstant);
-                    foreach (var interval in intervals)
+                    try
                     {
-
-                        var utcStart = interval.Start == Instant.MinValue
+                        utcStart = interval.Start == Instant.MinValue
                             ? DateTime.MinValue
                             : interval.Start.ToDateTimeUtc();
+                    }
+                    catch (InvalidOperationException e) when (e.Message == "Zone interval extends to the beginning of time")
+                    {
+                        // no-op
+                    }
 
-                        var utcEnd = interval.End == Instant.MaxValue
+                    try
+                    {
+                        utcEnd = interval.End == Instant.MaxValue
                             ? DateTime.MaxValue
                             : interval.End.ToDateTimeUtc();
+                    }
+                    catch (InvalidOperationException e) when (e.Message == "Zone interval extends to the end of time")
+                    {
+                        // no-op
+                    }
 
-                        var localStart = utcStart == DateTime.MinValue
+                    try
+                    {
+                        localStart = utcStart == DateTime.MinValue
                             ? DateTime.MinValue
                             : interval.IsoLocalStart.ToDateTimeUnspecified();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                    }
 
-                        var localEnd = utcEnd == DateTime.MaxValue
+                    try
+                    {
+                        localEnd = utcEnd == DateTime.MaxValue
                             ? DateTime.MaxValue
                             : interval.IsoLocalEnd.ToDateTimeUnspecified();
-
-
-                        var offsetMinutes = (short)interval.WallOffset.ToTimeSpan().TotalMinutes;
-
-                        var abbreviation = interval.Name;
-
-                        if (abbreviation.StartsWith("Etc/"))
-                        {
-                            abbreviation = abbreviation.Substring(4);
-                            if (abbreviation.StartsWith("GMT+"))
-                                abbreviation = "GMT-" + abbreviation.Substring(4);
-                            else if (abbreviation.StartsWith("GMT-"))
-                                abbreviation = "GMT+" + abbreviation.Substring(4);
-                        }
-
-                        dt.Rows.Add(utcStart, utcEnd, localStart, localEnd, offsetMinutes, abbreviation);
                     }
-
-                    var cs = _options.ConnectionString;
-                    using (var connection = new SqlConnection(cs))
+                    catch (Exception e)
                     {
-                        var command = new SqlCommand("[Tzdb].[SetIntervals]", connection)
-                        {
-                            CommandType = CommandType.StoredProcedure
-                        };
-                        command.Parameters.AddWithValue("@ZoneId", zones[id]);
-                        var tvp = command.Parameters.AddWithValue("@Intervals", dt);
-                        tvp.SqlDbType = SqlDbType.Structured;
-                        tvp.TypeName = "[Tzdb].[IntervalTable]";
-
-                        await connection.OpenAsync();
-                        await command.ExecuteNonQueryAsync();
-                        connection.Close();
+                        Console.WriteLine(e);
                     }
+
+
+                    var offsetMinutes = (short)interval.WallOffset.ToTimeSpan().TotalMinutes;
+
+                    var abbreviation = interval.Name;
+
+                    if (abbreviation.StartsWith("Etc/"))
+                    {
+                        abbreviation = abbreviation.Substring(4);
+                        if (abbreviation.StartsWith("GMT+"))
+                            abbreviation = "GMT-" + abbreviation.Substring(4);
+                        else if (abbreviation.StartsWith("GMT-"))
+                            abbreviation = "GMT+" + abbreviation.Substring(4);
+                    }
+
+                    dt.Rows.Add(utcStart, utcEnd, localStart, localEnd, offsetMinutes, abbreviation);
                 }
+
+                var cs = _options.ConnectionString;
+                using var connection = new SqlConnection(cs);
+                var command = new SqlCommand("[Tzdb].[SetIntervals]", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+                command.Parameters.AddWithValue("@ZoneId", zones[id]);
+                var tvp = command.Parameters.AddWithValue("@Intervals", dt);
+                tvp.SqlDbType = SqlDbType.Structured;
+                tvp.TypeName = "[Tzdb].[IntervalTable]";
+
+                await connection.OpenAsync();
+                await command.ExecuteNonQueryAsync();
+                connection.Close();
             }
         }
 
         private static async Task WriteVersion(string version)
         {
             var cs = _options.ConnectionString;
-            using (var connection = new SqlConnection(cs))
-            {
-                var command = new SqlCommand("[Tzdb].[SetVersion]", connection) { CommandType = CommandType.StoredProcedure };
-                command.Parameters.AddWithValue("@Version", version);
+            using var connection = new SqlConnection(cs);
+            var command = new SqlCommand("[Tzdb].[SetVersion]", connection) { CommandType = CommandType.StoredProcedure };
+            command.Parameters.AddWithValue("@Version", version);
 
-                await connection.OpenAsync();
-                await command.ExecuteNonQueryAsync();
-                connection.Close();
-            }
+            await connection.OpenAsync();
+            await command.ExecuteNonQueryAsync();
+            connection.Close();
         }
     }
 }
