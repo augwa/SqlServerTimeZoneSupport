@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Name>Database</Name>
     <ProjectGuid>{EA37F5F7-FD91-47EF-B7DC-EECB4CF286D9}</ProjectGuid>
-    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql160DatabaseSchemaProvider</DSP>
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql150DatabaseSchemaProvider</DSP>
     <ModelCollation>1033, CI</ModelCollation>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <DefaultSchema>Tzdb</DefaultSchema>
